@@ -45,8 +45,6 @@ public class LoginController {
 
         // Validate the username and password
         String encodedPassword = PropertiesUtil.getProperty(username);
-        System.out.println(encodedPassword);
-        System.out.println("password received: "+password);
         if (encodedPassword == null || !PasswordEncoderUtil.matches(password, encodedPassword)) {
             return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.UNAUTHORIZED, "application/json", "{\"error\":\"Invalid credentials\"}");
         }

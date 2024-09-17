@@ -11,32 +11,36 @@ import fi.iki.elonen.NanoHTTPD;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLServerSocketFactory;
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.KeyStore;
+
+import static com.rahulrathore.Config.*;
 
 public class DemoApplication {
 
     private static CountryService countryService;
     private static NanoHTTPD server;
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         int port = 8443; // Default port for HTTPS
-        if (args.length > 0) {
-            try {
-                port = Integer.parseInt(args[0]);
-            } catch (NumberFormatException e) {
-                System.err.println("Invalid port number, using default port 8443.");
-            }
-        }
 
+        // Get file paths from command-line arguments or use default values from resources folder
+         userPropertiesPath = getFilePathOrDefault(args, 1, "users.properties");
+         keystorePath = getFilePathOrDefault(args, 2, "keystore.jks");
+         configPropertiesPath = getFilePathOrDefault(args, 3, "config.properties");
+        System.out.println("Using keystore path: " + keystorePath);
+        System.out.println("Using user properties path: " + userPropertiesPath);
+        System.out.println("Using config properties path: " + configPropertiesPath);
+
+        // Initialize country service with config properties file
         countryService = new CountryService();
 
         // Outer loop to handle server restarts
         while (true) {
             try {
                 // Initialize and start the server
-                startServer(port);
+                startServer(port, keystorePath);
 
                 // Wait for server shutdown (this will block until an error occurs or the server is stopped)
                 while (true) {
@@ -62,7 +66,7 @@ public class DemoApplication {
     }
 
     // Method to initialize and start the NanoHTTPD server
-    private static void startServer(int port) throws IOException {
+    private static void startServer(int port, String keystorePath) throws IOException {
         server = new NanoHTTPD(port) {
             @Override
             public Response serve(IHTTPSession session) {
@@ -109,7 +113,7 @@ public class DemoApplication {
         };
 
         // Configure SSL for the server
-        server.makeSecure(createSSLSocketFactory(), null);
+        server.makeSecure(createSSLSocketFactory(keystorePath), null);
         server.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
 
         System.out.println("Server started on port " + port + ". Waiting for requests...");
@@ -123,11 +127,16 @@ public class DemoApplication {
         }
     }
 
-    private static SSLServerSocketFactory createSSLSocketFactory() {
+    private static SSLServerSocketFactory createSSLSocketFactory(String keystorePath) {
         try {
             KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            FileInputStream fis = new FileInputStream("src/main/resources/keystore.jks");
-            keyStore.load(fis, "changeit".toCharArray());
+            InputStream keystoreStream = loadResourceOrExternalFile(keystorePath);
+
+            if (keystoreStream == null) {
+                throw new RuntimeException("Keystore file not found");
+            }
+
+            keyStore.load(keystoreStream, "changeit".toCharArray());
 
             KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             keyManagerFactory.init(keyStore, "changeit".toCharArray());
@@ -140,4 +149,14 @@ public class DemoApplication {
             throw new RuntimeException("Failed to create SSL socket factory", e);
         }
     }
+
+    // Helper method to get file path from args or use default resource path
+    private static String getFilePathOrDefault(String[] args, int index, String defaultFileName) {
+        if (args.length > index && args[index] != null && !args[index].isEmpty()) {
+            return args[index];
+        }
+        return defaultFileName;
+    }
+
+    // Helper method to load a file either from the resources folder or from an external path
 }
